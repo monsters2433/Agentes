@@ -2,6 +2,26 @@
 
 Agentes para Claude Code.
 
+## `homelab-asesor`
+
+Asesor **crítico** de tu homelab (repo `monsters2433/homelab`): lo lee en vivo,
+pregunta cuando falta un dato que cambia la recomendación, compara los caminos
+posibles con ventajas/riesgos y recomienda uno justificando el porqué para *tu*
+red. Discrepa cuando una petición es insegura o frágil. Cubre apps internas,
+red/OPNsense/Tailscale, Proxmox, K8s, TrueNAS, backups e **IA local** (Ollama,
+vLLM, llama.cpp; Claude Code, opencode u OpenClaw sobre modelos locales).
+
+Solo asesora y propone: no ejecuta cambios ni toca el repo `homelab`.
+
+Se invoca con `/homelab-asesor` o pidiendo opinión sobre cualquier cambio del
+homelab. Conocimiento de apoyo en `references/` (IA local; red y plataforma).
+
+### `homelab-auditor` (subagente)
+
+Auditor de solo lectura (`.claude/agents/homelab-auditor.md`) para revisiones
+largas: contradicciones entre notas, pendientes, servicios duplicados, backups y
+contraste de un plan con la topología antes de ejecutarlo.
+
 ## `revision-copias`
 
 Revisa la carpeta `ALERTAS` del buzón `alertas-01@laberit.com`, detecta los
