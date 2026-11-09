@@ -1,56 +1,52 @@
-# IA local en el homelab
+# IA en el homelab: OpenClaw con Claude (y modelos locales como alternativa)
 
-> Los datos de esta guía son orientativos y envejecen rápido. Todo lo marcado (verificar) se comprueba en la documentación oficial antes de afirmarlo.
+> Contexto del usuario: **el hardware es irrelevante** porque el plan es usar **Claude vía OpenClaw**, no inferencia local. El modelo corre en la nube de Anthropic; el homelab solo aloja el gateway. No preguntes por GPU/VRAM salvo que el usuario pida explícitamente modelos locales.
+>
+> Todo lo marcado (verificar) se comprueba en la doc oficial (`docs.openclaw.ai`, docs de Anthropic) antes de afirmarlo; en algunas sesiones ese dominio está bloqueado: dilo y pide que lo permitan.
 
-## 1. Preguntas que cambian la recomendación
-1. ¿GPU en el nodo Proxmox? Modelo y **VRAM** (decide qué modelo cabe). Si no consta en el repo, preguntar.
-2. ¿CPU/RAM libre? (RAM del sistema permite offload parcial, mucho más lento.)
-3. ¿Objetivo? Chat/RAG, asistente de código agéntico, embeddings, voz, visión, automatización.
-4. ¿Privacidad estricta (nada sale de casa) o vale un modelo en la nube para lo difícil?
-5. ¿Desde dónde se usa: PC, portátil, móvil, otros servicios? ¿Cuántos usuarios simultáneos?
+## 1. Qué es OpenClaw (según fuentes secundarias, verificar)
+Gateway de agentes **autoalojado y open source**: se conecta a un proveedor de LLM (Anthropic, OpenAI, Gemini, modelos locales) y expone el agente por canales de mensajería (Telegram, WhatsApp, Discord…) y una interfaz web, con skills y ejecución de herramientas. No ejecuta el modelo por sí mismo.
 
-## 2. Dimensionado (regla práctica)
-- Memoria del modelo ≈ parámetros × bytes por peso: Q4 ≈ 0.55-0.65 GB por mil millones de parámetros, Q8 ≈ 1.1, FP16 = 2.
-- Añadir **KV cache**: crece con el contexto. Los agentes de código necesitan contexto largo (32k+ como punto de partida); con poca VRAM el contexto manda más que el tamaño del modelo.
-- Cabe en VRAM → rápido. Desborda a RAM/CPU → utilizable solo para tareas pequeñas.
-- Modelos MoE: cargan todo en memoria pero activan pocos parámetros por token; pueden ir aceptables con offload. (verificar según el modelo concreto)
+## 2. Preguntas que sí cambian el diseño
+1. ¿Por qué canales lo vas a usar (móvil, Telegram, web)? ¿Solo tú o más personas?
+2. ¿Qué debe poder **hacer** el agente: solo conversar, leer ficheros, ejecutar comandos, tocar el homelab/Home Assistant? Esto fija el nivel de riesgo.
+3. Autenticación con Claude: **API key** (facturación por uso, límite de gasto) o login de Claude Code/suscripción (`claude-cli`). Las fuentes indican que la política sobre usar suscripción en herramientas de terceros cambió en 2026 (verificar términos vigentes antes de recomendar nada). Por defecto recomendar API key con límite de gasto.
+4. ¿Presupuesto mensual tolerable? Un agente con herramientas puede gastar mucho en bucles.
 
-## 3. Servidores de inferencia
+## 3. Alojamiento recomendado en este homelab
+| Ubicación | Ganas | Pierdes |
+|-----------|-------|---------|
+| **VM Linux dedicada en `vmbr1` (`192.168.10.x`) con Docker** (recomendada) | Aislada de casa por la regla `BLOCK LAN→.0/24`, snapshots, rollback trivial | Una VM más; reservar IP fuera del pool Kea |
+| LXC con Docker | Ligero | Menos aislamiento para un agente con shell |
+| k3s | Ya existe | Complejidad innecesaria para un servicio; el agente tendría cerca el clúster |
+| Equipo personal | Cero infra | El agente alcanza tus datos personales y tu red de casa |
+
+Razón: el agente puede ejecutar código; que viva en la red aislada limita el daño. Los recursos que necesita son modestos (las fuentes citan unos 2 GB de RAM para construir la imagen Docker, verificar).
+
+## 4. Instalación (esquema, verificar contra la doc oficial)
+- Docker Compose v2; el script de instalación oficial lanza el onboarding, pide la clave del proveedor, genera un token de gateway en `.env` y arranca el servicio. Existe también ruta manual (`docker build` + `onboard` + `docker compose up -d`).
+- Proveedor Anthropic: clave `sk-ant-…` creada en la consola de Anthropic, en variable de entorno/secret, nunca en el repo.
+- Acceso desde el móvil: por **Tailscale** (la ruta `192.168.10.0/24` ya la anuncia OPNsense, ver `Tailscale.md`), enlazando el gateway a la interfaz interna, no a `0.0.0.0` hacia casa.
+
+## 5. Seguridad: lo crítico en un agente con herramientas
+Un agente que lee mensajes y ejecuta herramientas es objetivo de **prompt injection**: texto malicioso en un mensaje, web o fichero puede intentar que ejecute acciones.
+- Ejecutar en **VM dedicada** sin credenciales del resto del homelab (sin SSH keys a Proxmox, sin tokens de Cloudflare ni de OPNsense).
+- API key **dedicada** con **límite de gasto** y rotable.
+- No publicar el gateway en Internet (ni port-forward ni Cloudflare Tunnel sin auth fuerte); acceso solo por Tailscale.
+- Restringir quién puede escribirle (emparejamiento/allowlist de remitentes) (verificar nombre exacto de la opción).
+- Skills/plugins: revisar el código de cada skill de terceros antes de activarla; allow-list, no default-allow.
+- Sandbox de ejecución (contenedor) para las herramientas; permisos mínimos; confirmación humana para acciones destructivas.
+- Logs y revisión periódica del consumo.
+- Snapshot de la VM antes de dar más permisos al agente.
+
+## 6. Alternativas (compara siempre)
 | Opción | Cuándo | Contras |
 |--------|--------|---------|
-| **Ollama** | Empezar rápido, muchos modelos, API simple | Menos control fino, rendimiento multiusuario limitado |
-| **llama.cpp (`llama-server`)** | Control total, CPU/GPU mixto, GGUF | Más configuración manual |
-| **vLLM** | Varios usuarios, alto throughput, GPU NVIDIA seria | Exige VRAM y GPU compatible, más pesado |
-| **LM Studio / similares** | Uso en un PC de escritorio | No es un servicio de servidor |
+| **OpenClaw + API de Claude** | Agente personal multicanal, autoalojado | Superficie de ataque amplia; proyecto joven y cambiante (verificar madurez) |
+| **Claude Code** directo (CLI/web) | Programación y tareas de ficheros con permisos finos y soporte oficial | Sin canales de mensajería |
+| **Open WebUI + API de Claude** (vía proxy/función compatible, verificar) | Chat con login multiusuario y RAG | Menos "agéntico" |
+| **Modelo local** (Ollama, vLLM, llama.cpp) con opencode/OpenClaw | Privacidad total, coste cero por token | Exige GPU/VRAM; mucho menos capaz en tareas agénticas |
 
-Interfaces: Open WebUI (chat, RAG, multiusuario con login). Proxies/traductores de API: LiteLLM, claude-code-router (verificar estado actual).
-
-## 4. Usar Claude Code / agentes sobre modelos locales
-Claude Code habla el protocolo de la API de Anthropic. Hay tres rutas:
-
-| Ruta | Cómo | Pros | Contras |
-|------|------|------|---------|
-| A. Servidor con API compatible con Anthropic | Variables `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_MODEL` apuntando al servidor | Sin intermediarios | Comprobar que la versión del servidor expone `/v1/messages` y soporta tool use (verificar) |
-| B. Proxy traductor (LiteLLM / claude-code-router) delante de Ollama/vLLM | El proxy traduce Anthropic ↔ OpenAI | Funciona con cualquier backend | Un componente más que mantener y asegurar |
-| C. Otro agente de código diseñado para modelos locales | opencode, OpenClaw, Aider, Cline/Continue (verificar estado y soporte actual de cada uno) | Pensado para backends OpenAI-compatibles, sin traducir | No es Claude Code; otro flujo y otras herramientas |
-
-Notas críticas:
-- Un modelo local **no iguala a Claude** en tareas agénticas largas: más fallos de tool use y ediciones. Recomendar modelos específicos de código y probar con una tarea pequeña antes de comprometerse.
-- Contexto: el valor por defecto del servidor suele ser insuficiente; fijarlo explícitamente (p. ej. `OLLAMA_CONTEXT_LENGTH` en Ollama, verificar) y dimensionar VRAM para ello.
-- Híbrido razonable: modelo local para tareas privadas/baratas, Claude para lo complejo; alternar con variables de entorno o un script de lanzamiento.
-- Claude Code usa también un modelo pequeño para tareas auxiliares; si se redirige todo a un único backend, hay que fijar también esa variable (verificar nombre vigente en la doc).
-
-## 5. Dónde alojarlo en este homelab
-| Ubicación | Pros | Contras |
-|-----------|------|---------|
-| **VM con GPU passthrough** (IOMMU/vfio, VM exclusiva de la GPU) | Aislamiento, drivers propios, snapshots | La GPU queda dedicada a esa VM; passthrough exige BIOS/IOMMU correctos |
-| **LXC con GPU compartida del host** | Varios CTs pueden compartirla, menos sobrecarga | Driver del host compartido, menos aislamiento, más delicado |
-| **k3s (workers son VMs)** | Orquestación homogénea | Sin GPU en los workers no sirve; añade complejidad innecesaria para 1 servicio |
-| **Otro equipo (PC con GPU)** | No toca el nodo único de producción | Otro dispositivo que mantener; hay que enrutarlo por Tailscale |
-
-Recomendar la ubicación que **no ponga en riesgo el único nodo Proxmox** (el firewall y el NAS dependen de él): un uso intensivo de CPU/GPU/RAM puede degradar OPNsense y TrueNAS. Proponer límites de recursos y probar fuera de horas críticas.
-
-## 6. Seguridad de la IA local
-- Ollama y la mayoría de servidores **no tienen autenticación**: nunca exponer el puerto del modelo; publicar solo la interfaz con login (Open WebUI) y desactivar registro abierto.
-- Acceso remoto: Tailscale (ver `red-y-plataforma.md`). Los agentes de código con permisos de shell sobre un modelo menos fiable deben ejecutarse en un sandbox/VM sin acceso a la red de casa.
-- Modelos descargados de terceros: usar fuentes oficiales; los pesos no ejecutan código, pero los formatos antiguos tipo pickle sí pueden (preferir GGUF/safetensors).
+## 7. Modelos locales (solo si el usuario los pide)
+Memoria ≈ parámetros × bytes/peso (Q4 ≈ 0.55-0.65 GB por mil millones; Q8 ≈ 1.1; FP16 = 2) + KV cache, que crece con el contexto (agentes de código: 32k+). Servidores: Ollama (rápido de montar), llama.cpp (`llama-server`, control fino), vLLM (multiusuario con GPU NVIDIA seria). Claude Code contra un backend local: variables `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_MODEL` si el servidor expone la API de Anthropic, o con proxy traductor (LiteLLM, claude-code-router) (verificar). En ese caso sí hay que preguntar por GPU y respetar que el nodo Proxmox es único.
+Seguridad: Ollama no tiene autenticación; nunca exponer su puerto.
