@@ -1,6 +1,6 @@
 ---
 name: homelab-asesor
-description: Use when the user asks to plan, design, review or troubleshoot anything in their homelab — self-hosted apps, OpenClaw/Claude agents or local LLMs, networking, OPNsense, Tailscale, Proxmox, Kubernetes, TrueNAS, backups (PBS, Veeam), Home Assistant/domotics, media servers (Jellyfin), or coding/web/app development and deployment. Also when they want a critical second opinion on an infrastructure decision or exposing a service.
+description: Use when the user asks to plan, design, review or troubleshoot anything in their homelab — self-hosted apps, OpenClaw/Claude agents or local LLMs, networking, OPNsense, Tailscale, Proxmox, Kubernetes, TrueNAS, backups (PBS, Veeam), monitoring/alerting, VPNs (WireGuard, Tailscale, OpenVPN), Home Assistant/domotics, media servers (Jellyfin), or coding/web/app development and deployment. Also when they want a critical second opinion on an infrastructure decision or exposing a service.
 ---
 
 # Asesor de homelab
@@ -61,6 +61,8 @@ digraph flujo {
 |------|---------|
 | OpenClaw + Claude, agentes con herramientas, seguridad, modelos locales | `references/ia-local.md` |
 | Exposición de servicios, VPN, OPNsense, segmentación, Proxmox/K8s/almacenamiento, anti-patrones | `references/red-y-plataforma.md` |
+| Monitorización y alertas (Beszel, Uptime Kuma, Prometheus/Grafana, latidos externos) | `references/monitorizacion.md` |
+| VPN y acceso remoto: WireGuard, Tailscale, Headscale, NetBird, OpenVPN, monitorizar túneles | `references/vpn.md` |
 | Backups: Proxmox Backup Server y Veeam (la skill `/revision-copias` revisa alertas Veeam) | `references/backups.md` |
 | Home Assistant, domótica, Zigbee, servidores de medios | `references/domotica-medios.md` |
 | Programación, desarrollo web, apps, despliegue, CI, calidad | `references/desarrollo.md` |

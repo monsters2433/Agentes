@@ -10,7 +10,8 @@ posibles con ventajas/riesgos y recomienda uno justificando el porqué para *tu*
 red. Discrepa cuando una petición es insegura o frágil. Cubre apps internas,
 red/OPNsense/Tailscale, Proxmox, K8s, TrueNAS, backups e **IA local** (Ollama,
 vLLM, llama.cpp; Claude Code, opencode u OpenClaw con Claude o con modelos
-locales), backups (PBS, Veeam), Home Assistant y domótica, servidores de medios,
+locales), backups (PBS, Veeam), monitorización y alertas, VPN (WireGuard, Tailscale,
+Headscale, OpenVPN…), Home Assistant y domótica, servidores de medios,
 y programación/desarrollo web y de aplicaciones.
 
 Al cerrar cada diseño **propone las notas de documentación** (borrador listo
